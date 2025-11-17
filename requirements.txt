@@ -1,0 +1,7 @@
+streamlit
+openai
+pymongo
+python-dotenv
+dnspython
+requests
+google-genai
