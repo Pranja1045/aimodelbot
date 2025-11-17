@@ -9,6 +9,10 @@ from dotenv import load_dotenv
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGODB_URI = os.getenv("MONGODB_URI")
+if not GEMINI_API_KEY and MONGODB_URI:
+    GEMINI_API_KEY=st.secrets["api_key"]
+    MONGODB_URI = st.secrets["MONGODB_URI"]
+
 
 # Configure Gemini API
 genai.configure(api_key=GEMINI_API_KEY)
