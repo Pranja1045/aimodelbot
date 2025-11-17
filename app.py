@@ -16,7 +16,7 @@ if not GEMINI_API_KEY and MONGODB_URI:
 
 # Configure Gemini API
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.5-flash')  # Use the latest available Gemini Flash model
+model = genai.GenerativeModel('gemini-2.5-flash') # Using gemini-1.5-flash as 2.5 is not a public model
 
 try:
     client = MongoClient(MONGODB_URI)
@@ -27,11 +27,13 @@ except Exception as e:
     st.error(f"Cannot connect to MongoDB: {e}")
     st.stop()
 
-st.set_page_config(page_title="AI Customer Support Bot", layout="wide")
-st.title("AI Customer Support Bot")
+# --- UI Changes Start Here ---
+st.set_page_config(page_title="AI Groundwater Analysis", layout="wide")
+st.title("AI Groundwater Analysis Assistant")
 
 # Define your bot greeting
-bot_greeting = "Hello! Welcome to our support chat. How can I assist you today?"
+bot_greeting = "Hello! I am your AI Groundwater Analysis Assistant. How can I help you interpret your data today?"
+# --- UI Changes End Here ---
 
 with st.sidebar:
     st.header("User Settings")
@@ -41,6 +43,9 @@ with st.sidebar:
         st.session_state.session_id = str(uuid.uuid4())
         # Add bot greeting to new chat history
         st.session_state.chat_history = [{"sender": "assistant", "content": bot_greeting}]
+        # Note: This reset only resets the local session state.
+        # You might want to add logic to create a new session in the DB here too.
+
 
 if "session_id" not in st.session_state:
     session_id = str(uuid.uuid4())
@@ -69,6 +74,7 @@ def save_message(session_id, sender, content):
     })
 
 def get_history(session_id, limit=10):
+    # Fetch last 10 messages, then reverse them to show oldest first
     return list(messages.find({"session_id": session_id}).sort("timestamp", -1).limit(limit))[::-1]
 
 if "chat_history" not in st.session_state:
@@ -77,15 +83,28 @@ if "chat_history" not in st.session_state:
     if not st.session_state.chat_history:
         st.session_state.chat_history = [{"sender": "assistant", "content": bot_greeting}]
 
-user_input = st.text_input("Type your message:")
+
+# --- Layout Change Starts Here ---
+
+# 1. Create a container to hold the chat history
+chat_container = st.container()
+
+with chat_container:
+    for msg in st.session_state.chat_history:
+        st.markdown(f"**{msg['sender'].capitalize()}:** {msg['content']}")
+
+# 2. Place the input controls *after* the chat history
+user_input = st.text_input("Enter your groundwater query (e.g., 'Analyze trends for Well-B'):")
 
 if st.button("Send") and user_input:
     save_message(st.session_state.session_id, "user", user_input)
     st.session_state.chat_history.append({"sender": "user", "content": user_input})
+    
     # Concatenate chat history for context
     context = "\n".join(
         [f"{m['sender'].capitalize()}: {m['content']}" for m in st.session_state.chat_history]
     )
+    
     try:
         response = model.generate_content(context, generation_config={"temperature": temperature})
         bot_reply = response.text
@@ -96,7 +115,4 @@ if st.button("Send") and user_input:
     st.session_state.chat_history.append({"sender": "assistant", "content": bot_reply})
     st.rerun()
 
-for msg in st.session_state.chat_history:
-    st.markdown(f"**{msg['sender'].capitalize()}:** {msg['content']}")
-
-
+# --- Layout Change Ends Here ---
