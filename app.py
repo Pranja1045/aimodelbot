@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import generativeai as genai
 from pymongo import MongoClient
 from datetime import datetime
 import uuid
@@ -95,6 +95,4 @@ if st.button("Send") and user_input:
 for msg in st.session_state.chat_history:
     st.markdown(f"**{msg['sender'].capitalize()}:** {msg['content']}")
 
-if st.button("Escalate to Human"):
-    save_message(st.session_state.session_id, "system", "Conversation escalated to human.")
-    st.success("Escalation requested! A human support agent will contact you soon.")
+
