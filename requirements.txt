@@ -5,3 +5,7 @@ python-dotenv
 dnspython
 requests
 google-generativeai
+serpapi
+requests
+pandas
+datetime
