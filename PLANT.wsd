@@ -1,0 +1,79 @@
+@startuml
+
+skinparam componentStyle rectangle
+
+title Agentic Workflow System Architecture
+
+actor "User" as User
+
+package "Presentation Layer (Frontend)" {
+    [ReactJS Interface] as UI
+    note right of UI
+      - Text/Voice Input
+      - Dynamic Charts
+      - Mobile Optimized
+    end note
+}
+
+package "Orchestration Layer (AI Agent)" {
+    component "LLM Core" as LLM {
+        [Intent & Entity Extraction] as Intent
+        [Tool Selection] as Tools
+        [Query Formulation] as Query
+        [Synthesis & Response] as Synthesis
+    }
+    
+    note right of LLM
+      Acts as Reasoning Engine
+      & Orchestrator
+    end note
+}
+
+package "Computer Vision Module" {
+    [CNN Model] as CV
+    note bottom of CV
+      Analyzes uploaded images
+      (e.g., Turbidity checks)
+    end note
+}
+
+package "Data Integration Layer (API Gateway)" {
+    [API Execution] as API_Exec
+    [Data Normalization] as Normalizer
+    
+    note bottom of API_Exec
+      Auth, Rate Limiting,
+      Error Handling
+    end note
+}
+
+cloud "External Systems" {
+    [India-WRIS API] as WRIS
+}
+
+' Relationships and Flow
+
+' User Interaction
+User --> UI : Input (Text/Voice/Image)
+UI --> Intent : Sends Text/Voice Data
+UI --> CV : Uploads Image
+
+' Computer Vision Flow
+CV --> Synthesis : Returns Classification (e.g., Turbidity: High)
+
+' AI Agent Workflow
+Intent --> Tools : Identified Intent (Get_Groundwater) \n& Entity (Jaipur)
+Tools --> Query : Selects 'fetch_wris_data'
+Query --> API_Exec : Parameters (district_id=452)
+
+' Data Fetching Flow
+API_Exec --> WRIS : HTTPS Request
+WRIS --> API_Exec : Raw JSON/XML Response
+API_Exec --> Normalizer : Pass Raw Data
+Normalizer --> Synthesis : Normalized Simplified Data
+
+' Response Generation
+Synthesis --> UI : Natural Language Response \n+ Chart Data
+UI --> User : Display Response
+
+@enduml
