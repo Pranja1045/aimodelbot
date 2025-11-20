@@ -42,7 +42,7 @@ except Exception as e:
 st.set_page_config(page_title="AI Groundwater Agent", layout="wide")
 st.title("AI Groundwater Agent")
 
-bot_greeting = "Hello! I can compare groundwater trends. Try asking: 'Compare water levels in Raipur and Bhopal for the last year' or 'Show me trends for Jaipur'."
+bot_greeting = "Hello! I can compare groundwater trends. Prepare robust chart to analyse the data points and estimate the ground water level"
 
 # --- Session Management ---
 if "session_id" not in st.session_state:
@@ -128,7 +128,7 @@ def fetch_groundwater_api(state, district, start_date, end_date):
         "enddate": end_date,
         "download": "false",
         "page": "0",
-        "size": "500"
+        "size": "100"
     }
     headers = {
         "User-Agent": "Mozilla/5.0",
@@ -168,47 +168,39 @@ def process_groundwater_data(json_input, district_name):
         
         df = df.sort_values('timestamp')
         
-        # ADD DISTICT LABEL (Crucial for comparison graph)
         df['District'] = district_name 
         
         return df, True
     except Exception:
         return None, False
 
-# --- Main UI Layout ---
 
-# 1. GRAPH VISUALIZATION AREA
 if "groundwater_data" in st.session_state:
-    # Check if we are comparing or showing single
     districts = st.session_state.groundwater_data['District'].unique()
-    title_text = f"🌊 Analysis: {' vs '.join(districts)}"
+    title_text = f" Analysis: {' vs '.join(districts)}"
     
     st.subheader(title_text)
     
     tab1, tab2 = st.tabs(["Trend Graph", "Data Table"])
     with tab1:
-        # Streamlit handles color coding automatically if we map color='District'
         st.line_chart(st.session_state.groundwater_data, x='timestamp', y='dataValue', color='District')
     with tab2:
         st.dataframe(st.session_state.groundwater_data[['timestamp', 'dataValue', 'District', 'stationName']])
     
     st.divider()
 
-# 2. CHAT AREA
 chat_container = st.container()
 with chat_container:
     for msg in st.session_state.chat_history:
         st.markdown(f"**{msg['sender'].capitalize()}:** {msg['content']}")
 
-# 3. USER INPUT LOGIC
-user_input = st.chat_input("Ask to compare cities (e.g., 'Compare Raipur and Durg')...")
+user_input = st.chat_input("Ask to compare cities ")
 
 if user_input:
     save_message(st.session_state.session_id, "user", user_input)
     st.session_state.chat_history.append({"sender": "user", "content": user_input})
     
     with st.status("Processing Request...", expanded=True) as status:
-        # A. Analyze Intent
         status.write("Analyzing locations...")
         params = extract_params_from_llm(user_input)
         
@@ -222,7 +214,6 @@ if user_input:
                 combined_dfs = []
                 valid_districts = []
                 
-                # B. Fetch Loop
                 for loc in locations:
                     d_name = loc['district']
                     status.write(f"Fetching data for {d_name}...")
@@ -241,16 +232,12 @@ if user_input:
                     else:
                         status.write(f"⚠️ No data found for {d_name}")
 
-                # C. Aggregate & Display
                 if combined_dfs:
-                    # Merge all dataframes into one big one
                     final_df = pd.concat(combined_dfs, ignore_index=True)
                     
                     st.session_state.groundwater_data = final_df
                     status.update(label="Comparison Ready!", state="complete")
                     
-                    # Generate Comparative Analysis
-                    # We create a summary string of stats for each district
                     summary_stats = ""
                     for d in valid_districts:
                         d_stats = final_df[final_df['District'] == d]['dataValue'].describe().to_string()
@@ -275,7 +262,6 @@ if user_input:
                     bot_reply = "I couldn't find data for any of the requested locations. Please check the spelling or try a different date range."
         
         else:
-            # D. General Search Fallback
             status.write("Searching general knowledge...")
             try:
                 results = search.search(q=user_input, engine="google")
