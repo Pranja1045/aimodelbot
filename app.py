@@ -9,7 +9,7 @@ import serpapi
 import pandas as pd
 import json
 import requests
-
+import certifi
 load_dotenv()
 
 # --- UI config MUST be near top ---
