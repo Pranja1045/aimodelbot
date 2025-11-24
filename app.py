@@ -13,18 +13,24 @@ import requests
 load_dotenv()
 
 # --- Configuration ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-MONGODB_URI = os.getenv("MONGODB_URI")
-SERPAPI_KEY = os.getenv("api_key")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+MONGODB_URI   = os.getenv("MONGODB_URI") or st.secrets.get("MONGODB_URI")
+SERPAPI_KEY   = os.getenv("SERPAPI_KEY") or st.secrets.get("SERPAPI_KEY")
 
-if not GEMINI_API_KEY and "GEMINI_API_KEY" in st.secrets:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-if not MONGODB_URI and "MONGODB_URI" in st.secrets:
-    MONGODB_URI = st.secrets["MONGODB_URI"]
-if not SERPAPI_KEY and "api_key" in st.secrets:
-    SERPAPI_KEY = st.secrets["api_key"]
+if not GEMINI_API_KEY:
+    st.error("GEMINI_API_KEY is not configured.")
+    st.stop()
 
-search = serpapi.Client(api_key=SERPAPI_KEY)
+if not MONGODB_URI:
+    st.error("MONGODB_URI is not configured.")
+    st.stop()
+
+if not SERPAPI_KEY:
+    st.warning("SERPAPI_KEY not configured. Web search will be disabled.")
+    search = None
+else:
+    search = serpapi.Client(api_key=SERPAPI_KEY)
+
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
