@@ -17,7 +17,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGODB_URI = os.getenv("MONGODB_URI")
 SERPAPI_KEY = os.getenv("api_key")
 
-if not GEMINI_API_KEY and "api_key" in st.secrets:
+if not GEMINI_API_KEY and "GEMINI_API_KEY" in st.secrets:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 if not MONGODB_URI and "MONGODB_URI" in st.secrets:
     MONGODB_URI = st.secrets["MONGODB_URI"]
