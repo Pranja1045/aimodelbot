@@ -135,7 +135,7 @@ def fetch_groundwater_api(state, district, start_date, end_date):
         "Content-Type": "application/json",
     }
     try:
-        response = requests.post(url, params=params, headers=headers, verify=False, timeout=20)
+        response = requests.post(url, params=params, headers=headers, timeout=20)
         if response.status_code == 200:
             return response.text
         return None
