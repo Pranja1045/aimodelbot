@@ -41,13 +41,18 @@ genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 # MongoDB Connection
+db_available = True
+messages = None  # ensure it exists
+
 try:
     client = MongoClient(MONGODB_URI)
     db = client["chatbot"]
     sessions = db["sessions"]
     messages = db["messages"]
 except Exception as e:
-    st.error(f"Cannot connect to MongoDB: {e}")
+    st.warning(f"Cannot connect to MongoDB (logging disabled): {e}")
+    db_available = False
+
     
 
 # --- UI Setup ---
