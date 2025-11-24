@@ -9,7 +9,6 @@ import serpapi
 import pandas as pd
 import json
 import requests
-import certifi
 load_dotenv()
 
 # --- UI config MUST be near top ---
@@ -20,6 +19,7 @@ st.title("AI Groundwater Agent")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 MONGODB_URI   = os.getenv("MONGODB_URI")   or st.secrets.get("MONGODB_URI")
 SERPAPI_KEY   = os.getenv("SERPAPI_KEY")   or st.secrets.get("SERPAPI_KEY")
+WRIS_PROXY_URL = os.getenv("WRIS_PROXY") or st.secrets.get("WRIS_PROXY")
 
 if not GEMINI_API_KEY:
     st.error("GEMINI_API_KEY is not configured.")
@@ -119,7 +119,7 @@ def extract_params_from_llm(user_input: str):
 
 
 def fetch_groundwater_api(state, district, start_date, end_date):
-    url = "https://indiawris.gov.in/Dataset/Ground%20Water%20Level"
+    url = f"{WRIS_PROXY_URL}/groundwater"
     params = {
         "stateName": state,
         "districtName": district,
@@ -135,11 +135,10 @@ def fetch_groundwater_api(state, district, start_date, end_date):
         "Content-Type": "application/json"
     }
     try:
-        response = requests.post(
+        response = requests.get(
             url,
             params=params,
             headers=headers,
-            verify=certifi.where(),  # important fix
             timeout=20
         )
 
