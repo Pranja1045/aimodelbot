@@ -128,19 +128,30 @@ def fetch_groundwater_api(state, district, start_date, end_date):
         "enddate": end_date,
         "download": "false",
         "page": "0",
-        "size": "100",
+        "size": "100"
     }
     headers = {
         "User-Agent": "Mozilla/5.0",
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
     }
     try:
-        response = requests.post(url, params=params, headers=headers, timeout=20)
+        response = requests.post(
+            url,
+            params=params,
+            headers=headers,
+            verify=certifi.where(),  # important fix
+            timeout=20
+        )
+
+        # DEBUG: show status + first 400 chars in the app
+        st.write(f"DEBUG WRIS status for {district}: {response.status_code}")
+        st.write("DEBUG WRIS snippet:", response.text[:400])
+
         if response.status_code == 200:
             return response.text
         return None
     except Exception as e:
-        print("WRIS request error:", e)
+        st.write(f"WRIS ERROR for {district}: {e}")
         return None
 
 
