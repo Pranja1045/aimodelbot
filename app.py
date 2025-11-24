@@ -23,7 +23,7 @@ if not GEMINI_API_KEY:
 
 if not MONGODB_URI:
     st.error("MONGODB_URI is not configured.")
-    st.stop()
+    
 
 if not SERPAPI_KEY:
     st.warning("SERPAPI_KEY not configured. Web search will be disabled.")
@@ -42,7 +42,7 @@ try:
     messages = db["messages"]
 except Exception as e:
     st.error(f"Cannot connect to MongoDB: {e}")
-    st.stop()
+    
 
 # --- UI Setup ---
 st.set_page_config(page_title="AI Groundwater Agent", layout="wide")
