@@ -16,6 +16,12 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 MONGODB_URI   = os.getenv("MONGODB_URI") or st.secrets.get("MONGODB_URI")
 SERPAPI_KEY   = os.getenv("SERPAPI_KEY") or st.secrets.get("SERPAPI_KEY")
+st.write(
+    "DEBUG – has_keys:",
+    "GEMINI:", bool(GEMINI_API_KEY),
+    "MONGO:", bool(MONGODB_URI),
+    "SERPAPI:", bool(SERPAPI_KEY),
+)
 
 if not GEMINI_API_KEY:
     st.error("GEMINI_API_KEY is not configured.")
