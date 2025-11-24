@@ -142,9 +142,7 @@ def fetch_groundwater_api(state, district, start_date, end_date):
             timeout=20
         )
 
-        # DEBUG: show status + first 400 chars in the app
-        st.write(f"DEBUG WRIS status for {district}: {response.status_code}")
-        st.write("DEBUG WRIS snippet:", response.text[:400])
+       
 
         if response.status_code == 200:
             return response.text
