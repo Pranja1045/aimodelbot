@@ -154,7 +154,6 @@ def fetch_groundwater_api(state, district, start_date, end_date):
 
 
 def process_groundwater_data(json_input, district_name):
-    """Processes data and adds a 'District' column for comparison plotting."""
     try:
         if not json_input:
             return None, False
