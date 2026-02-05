@@ -72,7 +72,6 @@ def save_message(session_id, sender, content):
 
 
 def extract_params_from_llm(user_input: str):
-    """Updated to detect MULTIPLE locations for comparison."""
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     system_prompt = f"""
