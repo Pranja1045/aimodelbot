@@ -34,7 +34,7 @@ if not SERPAPI_KEY:
 else:
     search = serpapi.Client(api_key=SERPAPI_KEY)
 
-genai.configure(api_key=GEMINI_API_KEY)
+genai.Client(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # --- MongoDB Connection (SAFE) ---
