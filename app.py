@@ -23,7 +23,7 @@ SERPAPI_KEY    = os.getenv("SERPAPI_KEY")    or st.secrets.get("SERPAPI_KEY")
 WRIS_PROXY_URL = os.getenv("WRIS_PROXY")     or st.secrets.get("WRIS_PROXY")
 
 # Global Model ID - "gemini-2.0-flash" is current (2.5 is not yet a standard version)
-MODEL_ID = "gemini-2.0-flash"
+MODEL_ID = "gemini-1.5-flash"
 
 if not GEMINI_API_KEY:
     st.error("GEMINI_API_KEY is not configured.")
