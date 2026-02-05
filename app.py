@@ -323,7 +323,7 @@ if user_input:
                         1. Which district has deeper water levels (more negative)?
                         2. Are they stable or depleting?
                         3. Highlight the key differences.
-                        """
+                        
                         response = model.generate_content(analysis_prompt)
                         bot_reply = response.text
                     else:
