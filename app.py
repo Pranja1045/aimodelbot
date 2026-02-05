@@ -34,7 +34,8 @@ if not SERPAPI_KEY:
 else:
     search = serpapi.Client(api_key=SERPAPI_KEY)
 
-genai.Client(api_key=GEMINI_API_KEY)
+client=genai.Client(api_key=GEMINI_API_KEY)
+
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # --- MongoDB Connection (SAFE) ---
@@ -103,10 +104,10 @@ def extract_params_from_llm(user_input: str):
     Example: "Compare Raipur and Bhopal" -> returns 2 objects in "locations".
     Example: "Show Jaipur" -> returns 1 object in "locations".
     RETURN ONLY RAW JSON.
-    """
+    
 
     try:
-        response = model.generate_content(system_prompt)
+        response = client.models.generate_content(model,system_prompt)
         clean_text = (
             response.text.replace("```json", "").replace("```", "").strip()
         )
