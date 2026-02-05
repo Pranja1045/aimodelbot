@@ -1,5 +1,5 @@
 import streamlit as st
-from google import generativeai as genai
+from google import genai
 from pymongo import MongoClient
 from datetime import datetime, timedelta, timezone
 import uuid
