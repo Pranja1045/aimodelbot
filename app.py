@@ -1,5 +1,5 @@
 import streamlit as st
-from google import genai
+from google import generativeai as genai
 from pymongo import MongoClient
 from datetime import datetime, timedelta, timezone
 import uuid
@@ -9,7 +9,6 @@ import serpapi
 import pandas as pd
 import json
 import requests
-
 load_dotenv()
 
 # --- UI config MUST be near top ---
@@ -26,161 +25,352 @@ if not GEMINI_API_KEY:
     st.error("GEMINI_API_KEY is not configured.")
     st.stop()
 
-# Initialize the NEW Google GenAI Client
-client = genai.Client(api_key=GEMINI_API_KEY)
+if not MONGODB_URI:
+    st.warning("MONGODB_URI is not configured. Messages will not be logged.")
 
-# --- MongoDB Connection (Renamed to db_client to avoid conflict) ---
+if not SERPAPI_KEY:
+    st.warning("SERPAPI_KEY not configured. Web search will be disabled.")
+    search = None
+else:
+    search = serpapi.Client(api_key=SERPAPI_KEY)
+
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-2.5-flash")
+
+# --- MongoDB Connection (SAFE) ---
 db_available = True
-messages_col = None
+messages = None
 
 if MONGODB_URI:
     try:
-        # Changed 'client' to 'db_client' here
-        db_client = MongoClient(MONGODB_URI) 
-        db = db_client["chatbot"]
-        messages_col = db["messages"]
+        client = MongoClient(MONGODB_URI)
+        db = client["chatbot"]
+        sessions = db["sessions"]
+        messages = db["messages"]
     except Exception as e:
         st.warning(f"Cannot connect to MongoDB (logging disabled): {e}")
         db_available = False
 else:
     db_available = False
 
-if not SERPAPI_KEY:
-    st.warning("SERPAPI_KEY not configured. Web search will be disabled.")
-    search_client = None
-else:
-    search_client = serpapi.Client(api_key=SERPAPI_KEY)
-
 # --- Helper Functions ---
 
 def save_message(session_id, sender, content):
-    if not db_available or messages_col is None:
+    """Safely save a message only if MongoDB is available."""
+    if not db_available or messages is None:
         return
-    messages_col.insert_one({
-        "session_id": session_id,
-        "sender": sender,
-        "content": content,
-        "timestamp": datetime.now(timezone.utc),
-    })
+
+    messages.insert_one(
+        {
+            "session_id": session_id,
+            "sender": sender,
+            "content": content,
+            "timestamp": datetime.now(timezone.utc),
+        }
+    )
+
 
 def extract_params_from_llm(user_input: str):
+    """Updated to detect MULTIPLE locations for comparison."""
     today_str = datetime.now().strftime("%Y-%m-%d")
+
     system_prompt = f"""
     Current Date: {today_str}
     User Input: "{user_input}"
-    Task: Identify if the user wants groundwater data. 
-    Return ONLY raw JSON in this format:
+
+    Task:
+    1. Analyze if the user wants groundwater data.
+    2. If NO, return: {{"is_data_request": false}}
+    3. If YES, identify ALL locations mentioned.
+
+    Return JSON format:
     {{
       "is_data_request": true,
       "locations": [
-        {{ "district": "Name", "state": "State", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD" }}
+        {{
+          "district": "DistrictName1",
+          "state": "StateName1 (Infer if missing)",
+          "start_date": "YYYY-MM-DD (Default: 30 days ago)",
+          "end_date": "YYYY-MM-DD (Default: Today)"
+        }},
+        {{
+          "district": "DistrictName2",
+          "state": "StateName2"
+        }}
       ]
     }}
+
+    Example: "Compare Raipur and Bhopal" -> returns 2 objects in "locations".
+    Example: "Show Jaipur" -> returns 1 object in "locations".
+    RETURN ONLY RAW JSON.
     """
+
     try:
-        # Use new client syntax
-        response = client.models.generate_content(
-            model=MODEL_ID,
-            contents=system_prompt
+        response = model.generate_content(system_prompt)
+        clean_text = (
+            response.text.replace("```json", "").replace("```", "").strip()
         )
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        return json.loads(clean_text)
+        params = json.loads(clean_text)
+        return params
     except Exception as e:
+        # Show in logs so you can see what's wrong in Streamlit logs
         print("LLM Extraction Error:", e)
         return {"is_data_request": False}
 
+
 def fetch_groundwater_api(state, district, start_date, end_date):
-    url = f"{WRIS_PROXY_URL}/groundwater"
+    url = f"https://indiawris.gov.in/Dataset/Ground Water Level"
     params = {
-        "stateName": state, "districtName": district, "agencyName": "CGWB",
-        "startdate": start_date, "enddate": end_date, "download": "false",
-        "page": "0", "size": "100"
+        "stateName": state,
+        "districtName": district,
+        "agencyName": "CGWB",
+        "startdate": start_date,
+        "enddate": end_date,
+        "download": "false",
+        "page": "0",
+        "size": "100"
+    }
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Content-Type": "application/json"
     }
     try:
-        response = requests.get(url, params=params, timeout=20)
-        return response.text if response.status_code == 200 else None
+        response = requests.post(
+            url,
+            params=params,
+            headers=headers,
+            timeout=20
+        )
+
+       
+
+        if response.status_code == 200:
+            return response.text
+        return None
     except Exception as e:
         st.write(f"WRIS ERROR for {district}: {e}")
         return None
 
+
 def process_groundwater_data(json_input, district_name):
+    """Processes data and adds a 'District' column for comparison plotting."""
     try:
-        if not json_input: return None, False
+        if not json_input:
+            return None, False
+
         data = json.loads(json_input)
-        for key in ["content", "data", "result"]:
-            if key in data: data = data[key]
+
+        if isinstance(data, dict):
+            for key in ["content", "data", "result"]:
+                if key in data:
+                    data = data[key]
+                    break
+
+        if not isinstance(data, list):
+            return None, False
+
         df = pd.DataFrame(data)
+
         if "dataTime" not in df.columns or "dataValue" not in df.columns:
             return None, False
+
         df["timestamp"] = pd.to_datetime(df["dataTime"], errors="coerce")
-        df = df.dropna(subset=["timestamp"]).sort_values("timestamp")
+        df = df.dropna(subset=["timestamp"])
+        if df.empty:
+            return None, False
+
+        df = df.sort_values("timestamp")
         df["District"] = district_name
+
         return df, True
     except Exception as e:
+        print("Process groundwater data error:", e)
         return None, False
 
+
 # --- UI / Session Setup ---
-bot_greeting = "Hello! I can compare groundwater trends for you."
+
+bot_greeting = (
+    "Hello! I can compare groundwater trends. Prepare robust chart to analyse the "
+    "data points and estimate the ground water level."
+)
 
 if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-    st.session_state.chat_history = [{"sender": "assistant", "content": bot_greeting}]
+    session_id = str(uuid.uuid4())
+    st.session_state.session_id = session_id
+    st.session_state.chat_history = [
+        {"sender": "assistant", "content": bot_greeting}
+    ]
 
+# Sidebar
 with st.sidebar:
-    if st.button("Clear Chat"):
-        st.session_state.chat_history = [{"sender": "assistant", "content": bot_greeting}]
-        if "groundwater_data" in st.session_state: del st.session_state.groundwater_data
+    st.header("Settings")
+    if st.button("Clear Chat & Graphs"):
+        st.session_state.session_id = str(uuid.uuid4())
+        st.session_state.chat_history = [
+            {"sender": "assistant", "content": bot_greeting}
+        ]
+        if "groundwater_data" in st.session_state:
+            del st.session_state.groundwater_data
         st.rerun()
 
-# Display Chart
+# Show graph if data already present
 if "groundwater_data" in st.session_state:
-    st.subheader("Groundwater Analysis")
-    st.line_chart(st.session_state.groundwater_data, x="timestamp", y="dataValue", color="District")
+    districts = st.session_state.groundwater_data["District"].unique()
+    title_text = f" Analysis: {' vs '.join(districts)}"
 
-# Chat UI
-for msg in st.session_state.chat_history:
-    with st.chat_message(msg["sender"]):
-        st.markdown(msg["content"])
+    st.subheader(title_text)
 
-user_input = st.chat_input("Compare Bhopal and Raipur...")
+    tab1, tab2 = st.tabs(["Trend Graph", "Data Table"])
+    with tab1:
+        st.line_chart(
+            st.session_state.groundwater_data,
+            x="timestamp",
+            y="dataValue",
+            color="District",
+        )
+    with tab2:
+        st.dataframe(
+            st.session_state.groundwater_data[
+                ["timestamp", "dataValue", "District", "stationName"]
+            ]
+        )
+
+    st.divider()
+
+# Chat history display
+chat_container = st.container()
+with chat_container:
+    for msg in st.session_state.chat_history:
+        st.markdown(f"**{msg['sender'].capitalize()}:** {msg['content']}")
+
+# --- Main chat logic (wrapped in try/except) ---
+user_input = st.chat_input("Ask to compare cities ")
 
 if user_input:
-    st.session_state.chat_history.append({"sender": "user", "content": user_input})
-    save_message(st.session_state.session_id, "user", user_input)
-    
-    with st.chat_message("user"):
-        st.markdown(user_input)
+    try:
+        save_message(st.session_state.session_id, "user", user_input)
+        st.session_state.chat_history.append(
+            {"sender": "user", "content": user_input}
+        )
 
-    with st.status("Thinking...") as status:
-        params = extract_params_from_llm(user_input)
-        
-        if params.get("is_data_request"):
-            locations = params.get("locations", [])
-            combined_dfs = []
-            valid_districts = []
+        with st.status("Processing Request...", expanded=True) as status:
+            status.write("Analyzing locations...")
+            params = extract_params_from_llm(user_input)
 
-            for loc in locations:
-                d_name = loc["district"]
-                status.write(f"Fetching {d_name}...")
-                json_resp = fetch_groundwater_api(loc.get("state", ""), d_name, loc["start_date"], loc["end_date"])
-                df, is_valid = process_groundwater_data(json_resp, d_name)
-                if is_valid:
-                    combined_dfs.append(df)
-                    valid_districts.append(d_name)
+            if params.get("is_data_request"):
+                locations = params.get("locations", [])
 
-            if combined_dfs:
-                st.session_state.groundwater_data = pd.concat(combined_dfs)
-                # Generate AI analysis
-                analysis_prompt = f"Analyze these trends for {valid_districts}: {user_input}"
-                response = client.models.generate_content(model=MODEL_ID, contents=analysis_prompt)
-                bot_reply = response.text
+                if not locations:
+                    bot_reply = (
+                        "I couldn't identify the district names. "
+                        "Please mention them clearly."
+                    )
+                    status.update(label="Error", state="error")
+                else:
+                    combined_dfs = []
+                    valid_districts = []
+
+                    for loc in locations:
+                        d_name = loc["district"]
+                        status.write(f"Fetching data for {d_name}...")
+
+                        json_resp = fetch_groundwater_api(
+                            loc.get("state", ""),
+                            d_name,
+                            loc["start_date"],
+                            loc["end_date"],
+                        )
+
+                        df, is_valid = process_groundwater_data(
+                            json_resp, d_name
+                        )
+                        if is_valid and not df.empty:
+                            combined_dfs.append(df)
+                            valid_districts.append(d_name)
+                        else:
+                            status.write(f"⚠️ No data found for {d_name}")
+
+                    if combined_dfs:
+                        final_df = pd.concat(combined_dfs, ignore_index=True)
+                        st.session_state.groundwater_data = final_df
+                        status.update(
+                            label="Comparison Ready!", state="complete"
+                        )
+
+                        summary_stats = ""
+                        for d in valid_districts:
+                            d_stats = (
+                                final_df[
+                                    final_df["District"] == d
+                                ]["dataValue"]
+                                .describe()
+                                .to_string()
+                            )
+                            summary_stats += (
+                                f"\n--- Stats for {d} ---\n{d_stats}\n"
+                            )
+
+                        analysis_prompt = f"""
+                        User Request: "{user_input}"
+                        I have successfully plotted data for: {', '.join(valid_districts)}.
+
+                        Statistical Summary:
+                        {summary_stats}
+
+                        Task: Compare the groundwater trends.
+                        1. Which district has deeper water levels (more negative)?
+                        2. Are they stable or depleting?
+                        3. Highlight the key differences.
+                        """
+                        response = model.generate_content(analysis_prompt)
+                        bot_reply = response.text
+                    else:
+                        status.update(
+                            label="No Data Found", state="error"
+                        )
+                        bot_reply = (
+                            "I couldn't find data for any of the requested "
+                            "locations. Please check the spelling or try a "
+                            "different date range."
+                        )
+
             else:
-                bot_reply = "No data found for those locations."
-        else:
-            # Simple AI chat
-            response = client.models.generate_content(model=MODEL_ID, contents=user_input)
-            bot_reply = response.text
+                status.write("Searching general knowledge...")
+                try:
+                    if search is not None:
+                        results = search.search(q=user_input, engine="google")
+                        
+                        # Safe extraction
+                        ai_data = results.get("ai_overview", {})
+                        text_blocks = ai_data.get("text_blocks", [])
+                        organic = results.get("organic_results", [])
 
-    st.session_state.chat_history.append({"sender": "assistant", "content": bot_reply})
-    save_message(st.session_state.session_id, "assistant", bot_reply)
-    st.rerun()
+                        if text_blocks:
+                            # Use AI overview if present
+                            snippet = text_blocks[0].get("snippet", "")
+                            prompt = f"Using this overview: {snippet}\nAnswer: {user_input}"
+                            bot_reply = model.generate_content(prompt).text
+                        elif organic:
+                            # Use top organic result if AI overview is missing
+                            snippet = organic[0].get("snippet", "")
+                            prompt = f"Based on this result: {snippet}\nAnswer: {user_input}"
+                            bot_reply = model.generate_content(prompt).text
+                        else:
+                            # No search results found at all
+                            bot_reply = model.generate_content(user_input).text
+                    else:
+                        bot_reply = model.generate_content(user_input).text
+                        
+                except Exception as e:
+                    bot_reply = f"Error during search: {e}"
+                
+
+        save_message(st.session_state.session_id, "assistant", bot_reply)
+        st.session_state.chat_history.append(
+            {"sender": "assistant", "content": bot_reply}
+        )
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"Something went wrong: {e}")
