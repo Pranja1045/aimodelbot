@@ -19,6 +19,7 @@ st.title("AI Groundwater Agent")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 MONGODB_URI   = os.getenv("MONGODB_URI")   or st.secrets.get("MONGODB_URI")
 SERPAPI_KEY   = os.getenv("SERPAPI_KEY")   or st.secrets.get("SERPAPI_KEY")
+SERPAPI_KEY   = os.getenv("SERPAPI_KEY")
 WRIS_PROXY_URL = os.getenv("WRIS_PROXY") or st.secrets.get("WRIS_PROXY")
 
 if not GEMINI_API_KEY:
