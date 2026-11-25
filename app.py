@@ -526,49 +526,41 @@ def fetch_groundwater_api(
     end_date
 ):
 
-    base_url = (
-        "https://indiawris.gov.in/"
-        "Dataset/Ground%20Water%20Level"
+    proxy_url = (
+        st.secrets["WRIS_PROXY_URL"].rstrip("/")
+        + "/groundwater"
     )
 
-    params = {
-        "stateName": state,
-        "districtName": district,
-        "agencyName": "CGWB",
-        "startdate": start_date,
-        "enddate": end_date,
-        "download": "false",
-        "page": "0",
-        "size": "100"
+    proxy_token = st.secrets["WRIS_PROXY_TOKEN"]
+
+    payload = {
+        "state": state,
+        "district": district,
+        "start_date": start_date,
+        "end_date": end_date
     }
-
-    # Encode spaces as %20, not +
-    query_string = urlencode(
-        params,
-        quote_via=quote
-    )
-
-    full_url = f"{base_url}?{query_string}"
-
-    debug_log(f"WRIS Request URL: {full_url}")
 
     try:
 
+        debug_log(
+            f"Sending {district} request through ngrok"
+        )
+
         response = requests.post(
-            full_url,
+            proxy_url,
+            json=payload,
             headers={
-                "Accept": "application/json"
+                "X-Proxy-Token": proxy_token
             },
-            data="",
-            timeout=(30, 90)
+            timeout=(20, 150)
         )
 
         debug_log(
-            f"HTTP Status: {response.status_code}"
+            f"Proxy HTTP status: {response.status_code}"
         )
 
         debug_log(
-            f"Response: {response.text[:2500]}"
+            f"Proxy response: {response.text[:2000]}"
         )
 
         response.raise_for_status()
@@ -578,7 +570,7 @@ def fetch_groundwater_api(
     except requests.exceptions.RequestException as e:
 
         debug_log(
-            f"WRIS connection error: {repr(e)}",
+            f"Proxy request failed: {repr(e)}",
             "ERROR"
         )
 
@@ -587,11 +579,12 @@ def fetch_groundwater_api(
     except ValueError as e:
 
         debug_log(
-            f"JSON parsing error: {repr(e)}",
+            f"Invalid JSON response: {repr(e)}",
             "ERROR"
         )
 
         return None
+
 
 
 
