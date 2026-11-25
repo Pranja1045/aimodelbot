@@ -449,6 +449,7 @@ wris_session.mount("https://", adapter)
 wris_session.mount("http://", adapter)
 
 
+
 def fetch_groundwater_api(
     state,
     district,
@@ -472,126 +473,114 @@ def fetch_groundwater_api(
     }
 
     headers = {
-        "User-Agent": "AI-Groundwater-Agent/1.0",
+        "User-Agent": "Mozilla/5.0",
         "Accept": "application/json"
     }
 
     try:
-        response = wris_session.post(
+        response = requests.post(
             url,
             params=params,
             headers=headers,
             timeout=(15, 90)
         )
 
-        print("WRIS URL:", response.url)
-        print("WRIS Status:", response.status_code)
-        print("WRIS Response:", response.text[:1000])
+        print("\n========== WRIS DEBUG ==========")
+        print("District:", district)
+        print("State:", state)
+        print("Date range:", start_date, "to", end_date)
+        print("Status:", response.status_code)
+        print("Content-Type:", response.headers.get("Content-Type"))
+        print("Response:", response.text[:3000])
+        print("================================\n")
 
         response.raise_for_status()
 
         return response.json()
 
-    except requests.exceptions.Timeout:
-        print(f"WRIS TIMEOUT: {district}")
-        return None
-
     except requests.exceptions.RequestException as e:
-        print(f"WRIS REQUEST ERROR: {district}: {e}")
+        print("WRIS REQUEST ERROR:", repr(e))
         return None
 
     except ValueError as e:
-        print(f"WRIS JSON ERROR: {district}: {e}")
+        print("WRIS JSON ERROR:", repr(e))
         return None
+
 
 
 # =========================================================
 # 11. PROCESS GROUNDWATER DATA
 # =========================================================
 
+
 def process_groundwater_data(
     json_input,
     district_name,
     state_name
 ):
-    """
-    Convert API JSON into a clean Pandas DataFrame.
-    """
-
     try:
-
         if not json_input:
+            print("Empty API response:", district_name)
             return None, False
 
         data = json_input
 
-        # Handle nested API responses
+        print("Original response type:", type(data))
 
         if isinstance(data, dict):
 
-            for key in [
-                "content",
-                "data",
-                "result",
-                "results"
-            ]:
+            print("Response keys:", list(data.keys()))
 
+            for key in ["content", "data", "result", "results"]:
                 if key in data:
-
                     data = data[key]
+                    print("Using nested key:", key)
                     break
 
         if isinstance(data, dict):
-
-            if "content" in data:
-                data = data["content"]
+            data = [data]
 
         if not isinstance(data, list):
+            print("Unexpected data structure:", type(data))
             return None, False
 
         if not data:
+            print("No records returned:", district_name)
             return None, False
 
         df = pd.DataFrame(data)
 
-        required_columns = [
-            "dataTime",
-            "dataValue"
-        ]
+        print("Available columns:", df.columns.tolist())
+        print("First records:\n", df.head())
 
-        for col in required_columns:
+        # Normalize column names
+        df.columns = df.columns.str.strip()
 
-            if col not in df.columns:
-                return None, False
+        if "dataTime" not in df.columns:
+            print("Missing dataTime column")
+            return None, False
 
-        # Convert timestamps
+        if "dataValue" not in df.columns:
+            print("Missing dataValue column")
+            return None, False
 
         df["timestamp"] = pd.to_datetime(
             df["dataTime"],
             errors="coerce"
         )
 
-        # Convert groundwater measurements
-
         df["dataValue"] = pd.to_numeric(
             df["dataValue"],
             errors="coerce"
         )
-
-        # Remove invalid records
 
         df = df.dropna(
             subset=["timestamp", "dataValue"]
         )
 
         if df.empty:
+            print("No valid measurements after cleaning")
             return None, False
-
-        df = df.sort_values(
-            "timestamp"
-        )
-
-        # Add comparison identifiers
 
         df["District"] = district_name
         df["State"] = state_name
@@ -599,14 +588,10 @@ def process_groundwater_data(
         if "stationName" not in df.columns:
             df["stationName"] = "Unknown"
 
-        return df, True
+        return df.sort_values("timestamp"), True
 
     except Exception as e:
-
-        print(
-            f"Data processing error for {district_name}: {e}"
-        )
-
+        print("PROCESSING ERROR:", repr(e))
         return None, False
 
 
