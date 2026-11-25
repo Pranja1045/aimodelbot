@@ -27,6 +27,71 @@ st.set_page_config(
 
 # Read credentials from environment variables or Streamlit secrets
 
+# =========================================================
+# STREAMLIT DEBUG LOGGER
+# =========================================================
+
+def debug_log(message, level="info"):
+    """
+    Display debugging information inside Streamlit.
+    Also write to Streamlit Cloud logs.
+    """
+
+    if "debug_logs" not in st.session_state:
+        st.session_state.debug_logs = []
+
+    timestamp = datetime.now().strftime("%H:%M:%S")
+
+    log_entry = {
+        "time": timestamp,
+        "level": level.upper(),
+        "message": str(message)
+    }
+
+    st.session_state.debug_logs.append(log_entry)
+
+    # Also send to Streamlit Cloud logs
+    print(f"[{timestamp}] [{level.upper()}] {message}")
+
+
+def show_debug_logs():
+    """
+    Display accumulated debugging information.
+    """
+
+    with st.expander("🔧 API Debug Console", expanded=True):
+
+        if not st.session_state.get("debug_logs"):
+            st.info("No debugging information available.")
+            return
+
+        for log in st.session_state.debug_logs:
+
+            if log["level"] == "ERROR":
+                st.error(
+                    f"[{log['time']}] {log['message']}"
+                )
+
+            elif log["level"] == "WARNING":
+                st.warning(
+                    f"[{log['time']}] {log['message']}"
+                )
+
+            elif log["level"] == "SUCCESS":
+                st.success(
+                    f"[{log['time']}] {log['message']}"
+                )
+
+            else:
+                st.info(
+                    f"[{log['time']}] {log['message']}"
+                )
+
+        if st.button("Clear Debug Logs"):
+            st.session_state.debug_logs = []
+            st.rerun()
+
+
 def get_secret(env_name, secret_name=None):
     value = os.getenv(env_name)
 
@@ -450,12 +515,14 @@ wris_session.mount("http://", adapter)
 
 
 
+
 def fetch_groundwater_api(
     state,
     district,
     start_date,
     end_date
 ):
+
     url = (
         "https://indiawris.gov.in/"
         "Dataset/Ground%20Water%20Level"
@@ -477,7 +544,20 @@ def fetch_groundwater_api(
         "Accept": "application/json"
     }
 
+    debug_log(
+        f"Starting API request for {district}, {state}"
+    )
+
+    debug_log(
+        f"Date range: {start_date} to {end_date}"
+    )
+
+    debug_log(
+        f"Request parameters: {params}"
+    )
+
     try:
+
         response = requests.post(
             url,
             params=params,
@@ -485,26 +565,74 @@ def fetch_groundwater_api(
             timeout=(15, 90)
         )
 
-        print("\n========== WRIS DEBUG ==========")
-        print("District:", district)
-        print("State:", state)
-        print("Date range:", start_date, "to", end_date)
-        print("Status:", response.status_code)
-        print("Content-Type:", response.headers.get("Content-Type"))
-        print("Response:", response.text[:3000])
-        print("================================\n")
+        debug_log(
+            f"HTTP Status: {response.status_code}"
+        )
+
+        debug_log(
+            f"Content-Type: {response.headers.get('Content-Type')}"
+        )
+
+        debug_log(
+            f"Response size: {len(response.content)} bytes"
+        )
+
+        debug_log(
+            f"Response preview: {response.text[:2500]}"
+        )
 
         response.raise_for_status()
 
-        return response.json()
+        data = response.json()
+
+        debug_log(
+            f"JSON successfully decoded. Type: {type(data).__name__}",
+            "SUCCESS"
+        )
+
+        if isinstance(data, dict):
+            debug_log(
+                f"JSON keys: {list(data.keys())}"
+            )
+
+        return data
+
+    except requests.exceptions.Timeout as e:
+
+        debug_log(
+            f"TIMEOUT for {district}: {repr(e)}",
+            "ERROR"
+        )
+
+        return None
+
+    except requests.exceptions.HTTPError as e:
+
+        debug_log(
+            f"HTTP ERROR for {district}: {repr(e)}",
+            "ERROR"
+        )
+
+        return None
 
     except requests.exceptions.RequestException as e:
-        print("WRIS REQUEST ERROR:", repr(e))
+
+        debug_log(
+            f"NETWORK ERROR for {district}: {repr(e)}",
+            "ERROR"
+        )
+
         return None
 
     except ValueError as e:
-        print("WRIS JSON ERROR:", repr(e))
+
+        debug_log(
+            f"JSON DECODING ERROR: {repr(e)}",
+            "ERROR"
+        )
+
         return None
+
 
 
 
@@ -513,55 +641,94 @@ def fetch_groundwater_api(
 # =========================================================
 
 
+
 def process_groundwater_data(
     json_input,
     district_name,
     state_name
 ):
+
     try:
+
         if not json_input:
-            print("Empty API response:", district_name)
+            debug_log(
+                f"{district_name}: API returned empty response.",
+                "WARNING"
+            )
             return None, False
 
         data = json_input
 
-        print("Original response type:", type(data))
+        debug_log(
+            f"{district_name}: Response type = {type(data).__name__}"
+        )
 
         if isinstance(data, dict):
 
-            print("Response keys:", list(data.keys()))
+            debug_log(
+                f"{district_name}: Response keys = {list(data.keys())}"
+            )
 
-            for key in ["content", "data", "result", "results"]:
+            for key in [
+                "content",
+                "data",
+                "result",
+                "results"
+            ]:
+
                 if key in data:
                     data = data[key]
-                    print("Using nested key:", key)
+
+                    debug_log(
+                        f"{district_name}: Extracted nested key '{key}'"
+                    )
                     break
 
         if isinstance(data, dict):
             data = [data]
 
         if not isinstance(data, list):
-            print("Unexpected data structure:", type(data))
+
+            debug_log(
+                f"{district_name}: Unexpected response structure.",
+                "ERROR"
+            )
+
             return None, False
 
         if not data:
-            print("No records returned:", district_name)
+
+            debug_log(
+                f"{district_name}: API returned zero records.",
+                "WARNING"
+            )
+
             return None, False
 
         df = pd.DataFrame(data)
 
-        print("Available columns:", df.columns.tolist())
-        print("First records:\n", df.head())
+        debug_log(
+            f"{district_name}: Available columns = {df.columns.tolist()}"
+        )
 
-        # Normalize column names
-        df.columns = df.columns.str.strip()
+        debug_log(
+            f"{district_name}: Number of records = {len(df)}"
+        )
 
-        if "dataTime" not in df.columns:
-            print("Missing dataTime column")
-            return None, False
+        required = ["dataTime", "dataValue"]
 
-        if "dataValue" not in df.columns:
-            print("Missing dataValue column")
+        missing = [
+            col for col in required
+            if col not in df.columns
+        ]
+
+        if missing:
+
+            debug_log(
+                f"{district_name}: Missing columns: {missing}",
+                "ERROR"
+            )
+
             return None, False
 
         df["timestamp"] = pd.to_datetime(
@@ -574,12 +741,23 @@ def process_groundwater_data(
             errors="coerce"
         )
 
+        original_count = len(df)
+
         df = df.dropna(
             subset=["timestamp", "dataValue"]
         )
 
+        debug_log(
+            f"{district_name}: Removed {original_count - len(df)} invalid records."
+        )
+
         if df.empty:
-            print("No valid measurements after cleaning")
+
+            debug_log(
+                f"{district_name}: No valid measurements after cleaning.",
+                "WARNING"
+            )
+
             return None, False
 
         df["District"] = district_name
@@ -588,10 +766,20 @@ def process_groundwater_data(
         if "stationName" not in df.columns:
             df["stationName"] = "Unknown"
 
+        debug_log(
+            f"{district_name}: Successfully processed {len(df)} records.",
+            "SUCCESS"
+        )
+
         return df.sort_values("timestamp"), True
 
     except Exception as e:
-        print("PROCESSING ERROR:", repr(e))
+
+        debug_log(
+            f"{district_name}: PROCESSING ERROR: {repr(e)}",
+            "ERROR"
+        )
+
         return None, False
 
 
@@ -1039,5 +1227,5 @@ Present your answer using clear headings and bullets.
         "sender": "assistant",
         "content": bot_reply
     })
-
+    show_debug_logs()
     st.rerun()
