@@ -531,7 +531,7 @@ def fetch_groundwater_api(
         + "/groundwater"
     )
 
-    proxy_token = st.secrets["WRIS_PROXY_TOKEN"]
+   
 
     payload = {
         "state": state,
@@ -550,7 +550,7 @@ def fetch_groundwater_api(
             proxy_url,
             json=payload,
             headers={
-                "X-Proxy-Token": proxy_token
+               
             },
             timeout=(20, 150)
         )
@@ -569,10 +569,7 @@ def fetch_groundwater_api(
 
     except requests.exceptions.RequestException as e:
 
-        debug_log(
-            f"Proxy request failed: {repr(e)}",
-            "ERROR"
-        )
+        
 
         return None
 
