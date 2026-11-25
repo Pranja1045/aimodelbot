@@ -83,7 +83,7 @@ except Exception as e:
     st.stop()
 
 
-GEMINI_MODEL = "gemini-3.8-flash"
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 
 def ask_gemini(prompt):
