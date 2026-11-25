@@ -1228,4 +1228,4 @@ Present your answer using clear headings and bullets.
         "content": bot_reply
     })
     show_debug_logs()
-    st.rerun()
+    
