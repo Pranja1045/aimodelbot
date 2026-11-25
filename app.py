@@ -296,7 +296,7 @@ with st.sidebar:
 
     st.header("Settings")
 
-    st.write("**AI Model:** Gemini 2.5 Flash")
+    st.write("**AI Model:** Gemini 3.5 Flash lite")
 
     st.write(
         "**Groundwater Source:** India-WRIS / CGWB"
@@ -519,6 +519,7 @@ wris_session.mount("http://", adapter)
 
 from urllib.parse import urlencode, quote
 
+
 def fetch_groundwater_api(
     state,
     district,
@@ -531,7 +532,7 @@ def fetch_groundwater_api(
         + "/groundwater"
     )
 
-   
+    proxy_token = st.secrets["WRIS_PROXY_TOKEN"]
 
     payload = {
         "state": state,
@@ -550,7 +551,7 @@ def fetch_groundwater_api(
             proxy_url,
             json=payload,
             headers={
-               
+                "X-Proxy-Token": proxy_token
             },
             timeout=(20, 150)
         )
@@ -569,7 +570,10 @@ def fetch_groundwater_api(
 
     except requests.exceptions.RequestException as e:
 
-        
+        debug_log(
+            f"Proxy request failed: {repr(e)}",
+            "ERROR"
+        )
 
         return None
 
@@ -581,6 +585,7 @@ def fetch_groundwater_api(
         )
 
         return None
+
 
 
 
