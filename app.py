@@ -516,6 +516,9 @@ wris_session.mount("http://", adapter)
 
 
 
+
+from urllib.parse import urlencode, quote
+
 def fetch_groundwater_api(
     state,
     district,
@@ -523,7 +526,7 @@ def fetch_groundwater_api(
     end_date
 ):
 
-    url = (
+    base_url = (
         "https://indiawris.gov.in/"
         "Dataset/Ground%20Water%20Level"
     )
@@ -539,30 +542,25 @@ def fetch_groundwater_api(
         "size": "100"
     }
 
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
-
-    debug_log(
-        f"Starting API request for {district}, {state}"
+    # Encode spaces as %20, not +
+    query_string = urlencode(
+        params,
+        quote_via=quote
     )
 
-    debug_log(
-        f"Date range: {start_date} to {end_date}"
-    )
+    full_url = f"{base_url}?{query_string}"
 
-    debug_log(
-        f"Request parameters: {params}"
-    )
+    debug_log(f"WRIS Request URL: {full_url}")
 
     try:
 
         response = requests.post(
-            url,
-            params=params,
-            headers=headers,
-            timeout=(15, 90)
+            full_url,
+            headers={
+                "Accept": "application/json"
+            },
+            data="",
+            timeout=(30, 90)
         )
 
         debug_log(
@@ -570,55 +568,17 @@ def fetch_groundwater_api(
         )
 
         debug_log(
-            f"Content-Type: {response.headers.get('Content-Type')}"
-        )
-
-        debug_log(
-            f"Response size: {len(response.content)} bytes"
-        )
-
-        debug_log(
-            f"Response preview: {response.text[:2500]}"
+            f"Response: {response.text[:2500]}"
         )
 
         response.raise_for_status()
 
-        data = response.json()
-
-        debug_log(
-            f"JSON successfully decoded. Type: {type(data).__name__}",
-            "SUCCESS"
-        )
-
-        if isinstance(data, dict):
-            debug_log(
-                f"JSON keys: {list(data.keys())}"
-            )
-
-        return data
-
-    except requests.exceptions.Timeout as e:
-
-        debug_log(
-            f"TIMEOUT for {district}: {repr(e)}",
-            "ERROR"
-        )
-
-        return None
-
-    except requests.exceptions.HTTPError as e:
-
-        debug_log(
-            f"HTTP ERROR for {district}: {repr(e)}",
-            "ERROR"
-        )
-
-        return None
+        return response.json()
 
     except requests.exceptions.RequestException as e:
 
         debug_log(
-            f"NETWORK ERROR for {district}: {repr(e)}",
+            f"WRIS connection error: {repr(e)}",
             "ERROR"
         )
 
@@ -627,7 +587,7 @@ def fetch_groundwater_api(
     except ValueError as e:
 
         debug_log(
-            f"JSON DECODING ERROR: {repr(e)}",
+            f"JSON parsing error: {repr(e)}",
             "ERROR"
         )
 
