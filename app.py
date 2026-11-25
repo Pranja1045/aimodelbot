@@ -424,16 +424,37 @@ RULES:
 # 10. FETCH GROUNDWATER DATA FROM INDIA-WRIS
 # =========================================================
 
+
+import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Reusable HTTP session
+wris_session = requests.Session()
+
+retry_strategy = Retry(
+    total=3,
+    connect=3,
+    read=2,
+    backoff_factor=2,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["POST"],
+    raise_on_status=False
+)
+
+adapter = HTTPAdapter(max_retries=retry_strategy)
+
+wris_session.mount("https://", adapter)
+wris_session.mount("http://", adapter)
+
+
 def fetch_groundwater_api(
     state,
     district,
     start_date,
     end_date
 ):
-    """
-    Fetch groundwater level data from India-WRIS.
-    """
-
     url = (
         "https://indiawris.gov.in/"
         "Dataset/Ground%20Water%20Level"
@@ -451,45 +472,36 @@ def fetch_groundwater_api(
     }
 
     headers = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "AI-Groundwater-Agent/1.0",
         "Accept": "application/json"
     }
 
     try:
-
-        response = requests.post(
+        response = wris_session.post(
             url,
             params=params,
             headers=headers,
-            timeout=30
+            timeout=(15, 90)
         )
+
+        print("WRIS URL:", response.url)
+        print("WRIS Status:", response.status_code)
+        print("WRIS Response:", response.text[:1000])
 
         response.raise_for_status()
 
         return response.json()
 
     except requests.exceptions.Timeout:
-
-        st.warning(
-            f"Request timed out for {district}."
-        )
-
+        print(f"WRIS TIMEOUT: {district}")
         return None
 
     except requests.exceptions.RequestException as e:
-
-        st.warning(
-            f"India-WRIS API error for {district}: {e}"
-        )
-
+        print(f"WRIS REQUEST ERROR: {district}: {e}")
         return None
 
-    except ValueError:
-
-        st.warning(
-            f"Invalid JSON response for {district}."
-        )
-
+    except ValueError as e:
+        print(f"WRIS JSON ERROR: {district}: {e}")
         return None
 
 
