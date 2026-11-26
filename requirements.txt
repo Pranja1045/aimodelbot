@@ -4,9 +4,9 @@ pymongo
 python-dotenv
 dnspython
 requests
-google-generativeai
 serpapi
 requests
 pandas
 datetime
 uuid
+google-genai
